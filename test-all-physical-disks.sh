@@ -20,34 +20,22 @@ for DEV in $DISKS; do
     echo "Testing: $DEV  |  $MODEL  |  ${SIZE}"
     echo "------------------------------------------------------------"
 
-    # READ test — try raw device first, fall back to mounted filesystem if no access
-    if [ -r "$DEV" ] && fio --name=read-test --filename="$DEV" --rw=read --bs=1M --iodepth=32 --numjobs=1 --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep -q "READ:.*BW="; then
-        fio --name=read-test --filename="$DEV" --rw=read --bs=1M --iodepth=32 --numjobs=1 --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep "READ:.*BW="
+    # READ: try raw device, fall back to /tmp if no permission
+    if [ -r "$DEV" ] && fio --name=read-test --filename="$DEV" --rw=read --bs=1M --iodepth=32 --numjobs=1 --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep -q "READ:"; then
+        fio --name=read-test --filename="$DEV" --rw=read --bs=1M --iodepth=32 --numjobs=1 --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep "READ:"
     else
-        echo "→ No raw read access to $DEV, testing via /mnt or /tmp instead..."
+        echo "→ No raw read access – testing via /tmp file..."
         TESTDIR=$(mktemp -d /tmp/fio-test.XXXXXX)
-        fio --name=read-test --directory="$TESTDIR" --rw=read --bs=1M --iodepth=32 --numjobs=2 --size=2G --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep "READ:.*BW="
+        fio --name=read-test --directory="$TESTDIR" --rw=randread --bs=1M --iodepth=32 --numjobs=2 --size=2G --runtime=10 --time_based --direct=1 --output-format=human 2>/dev/null | grep "READ:"
         rm -rf "$TESTDIR"
     fi
 
-    # WRITE test — always to /tmp (safe and never needs root)
+    # WRITE: always safe in /tmp
     echo "→ Max WRITE speed (file in /tmp)..."
-    fio --name=write-test \
-      --filename=/tmp/fio-test-$(basename $DEV).tmp \
-      --rw=write \
-      --bs=1M \
-      --iodepth=32 \
-      --numjobs=2 \
-      --size=4G \
-      --runtime=10 \
-      --time_based \
-      --direct=1 \
-      --ioengine=libaio \
-      --group_reporting \
-      --output-format=human 2>/dev/null | grep "WRITE:.*BW="
+    fio --name=write-test --filename=/tmp/fio-test-$(basename $DEV).tmp --rw=write --bs=1M --iodepth=32 --numjobs=2 --size=4G --runtime=10 --time_based --direct=1 --ioengine=libaio --group_reporting --output-format=human 2>/dev/null | grep "WRITE:"
 
     rm -f /tmp/fio-test-$(basename $DEV).tmp
     echo
 done
 
-echo "=== All disks tested (no sudo used anywhere) ==="
+echo "=== All disks tested (no sudo used) ==="
